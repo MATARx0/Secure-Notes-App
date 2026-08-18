@@ -56,7 +56,74 @@ function rejectUnknownFields(allowedFields) {
   };
 }
 
+const DANGEROUS_KEY_PATTERN = /^\$|\./;
+
+function sanitizeInPlace(value) {
+  if (Array.isArray(value)) {
+    value.forEach(sanitizeInPlace);
+    return;
+  }
+
+  if (value === null || typeof value !== 'object') {
+    return;
+  }
+
+  Object.keys(value).forEach((key) => {
+    if (DANGEROUS_KEY_PATTERN.test(key)) {
+      delete value[key];
+      return;
+    }
+
+    sanitizeInPlace(value[key]);
+  });
+}
+
+// NoSQL operator-injection mitigation. Strips any object key starting with
+// "$" or containing "." so an attacker cannot smuggle a Mongo operator
+// object (e.g. {"email": {"$ne": null}}) into a query filter.
+//
+// The two request surfaces are handled differently on purpose:
+//
+//   req.body  — a plain data property created by express.json(), so it can
+//               simply be mutated in place.
+//
+//   req.query — in Express 5 this is a getter-only accessor that RE-PARSES
+//               req.url on every single access and returns a brand new
+//               object each time (see express/lib/request.js). Mutating the
+//               object it hands back therefore changes a throwaway copy and
+//               has no effect at all — a bug caught by
+//               tests/security/hardening.test.js. Assigning to req.query is
+//               also not an option (the property has no setter). The
+//               accessor is however `configurable`, so the correct fix is to
+//               parse it once, sanitise that snapshot, and redefine the
+//               property as an ordinary data property. This also removes the
+//               repeated re-parsing on every read.
+//
+// req.params is deliberately NOT handled here. This middleware is mounted at
+// the application level, which runs before route matching, so req.params is
+// still empty at this point; and route parameter *keys* come from the route
+// patterns the team writes (":userId"), never from the client, while their
+// values are always strings and can never be an operator object. Sanitising
+// it here would be dead code masquerading as a control.
+function stripMongoOperators(req, res, next) {
+  sanitizeInPlace(req.body);
+
+  const query = req.query;
+
+  sanitizeInPlace(query);
+
+  Object.defineProperty(req, 'query', {
+    value: query,
+    writable: true,
+    enumerable: true,
+    configurable: true,
+  });
+
+  return next();
+}
+
 module.exports = {
   handleValidation,
   rejectUnknownFields,
+  stripMongoOperators,
 };
