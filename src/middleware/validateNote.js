@@ -45,6 +45,30 @@ function validateCreateNote(req, res, next) {
   return next();
 }
 
+function validateNoteId(req, res, next) {
+  const { id } = req.params;
+
+  const objectIdPattern =
+    /^[0-9a-fA-F]{24}$/;
+
+  if (
+    typeof id !== 'string'
+    || !objectIdPattern.test(id)
+  ) {
+    const error = new Error(
+      'Invalid note identifier',
+    );
+
+    error.statusCode = 400;
+    error.code = 'INVALID_NOTE_ID';
+
+    return next(error);
+  }
+
+  return next();
+}
+
 module.exports = {
   validateCreateNote,
+  validateNoteId,
 };
