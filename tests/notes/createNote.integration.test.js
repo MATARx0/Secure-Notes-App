@@ -118,4 +118,21 @@ describe('POST /api/notes', () => {
     expect(response.status).toBe(400);
     expect(response.body.error.code).toBe('VALIDATION_ERROR');
   });
+
+  test('rejects unexpected note fields', async () => {
+    const response = await request(app)
+      .post('/api/notes')
+      .send({
+        title: 'Normal title',
+        content: 'Normal content',
+        owner: new mongoose.Types.ObjectId().toString(),
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error.code).toBe('VALIDATION_ERROR');
+
+    const noteCount = await Note.countDocuments();
+
+    expect(noteCount).toBe(0);
+  });
 });
