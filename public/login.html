@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Log in - Secure Notes</title>
+    <link rel="stylesheet" href="/css/styles.css" />
+  </head>
+  <body class="auth-page">
+    <main class="auth-card">
+      <h1>Log in</h1>
+
+      <div id="status-message" class="status-message" role="alert" aria-live="polite"></div>
+
+      <form id="login-form" novalidate>
+        <div class="form-group">
+          <label for="email">Email</label>
+          <input
+            id="email"
+            name="email"
+            type="email"
+            autocomplete="email"
+            required
+          />
+        </div>
+
+        <div class="form-group">
+          <label for="password">Password</label>
+          <input
+            id="password"
+            name="password"
+            type="password"
+            autocomplete="current-password"
+            required
+          />
+        </div>
+
+        <div id="recaptcha-container" class="captcha-widget"></div>
+
+        <div class="form-actions">
+          <button type="submit" class="primary-button" id="login-submit">Log in</button>
+        </div>
+      </form>
+
+      <form id="mfa-form" class="hidden" novalidate>
+        <p>Enter the 6-digit code from your authenticator app.</p>
+
+        <div class="form-group">
+          <label for="mfa-token">Authentication code</label>
+          <input
+            id="mfa-token"
+            name="mfaToken"
+            type="text"
+            inputmode="numeric"
+            pattern="[0-9]{6}"
+            maxlength="6"
+            autocomplete="one-time-code"
+            required
+          />
+        </div>
+
+        <div class="form-actions">
+          <button type="submit" class="primary-button" id="mfa-submit">Verify</button>
+          <button type="button" class="secondary-button" id="mfa-cancel">Cancel</button>
+        </div>
+      </form>
+
+      <p class="auth-links">
+        Need an account? <a href="/register.html">Create one</a>
+      </p>
+    </main>
+
+    <script src="/js/auth.js"></script>
+  </body>
+</html>
