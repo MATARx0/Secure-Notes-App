@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin - Secure Notes</title>
+    <link rel="stylesheet" href="/css/styles.css" />
+  </head>
+  <body>
+    <main class="page-container">
+      <header class="dashboard-header">
+        <div>
+          <h1>Administration</h1>
+          <p>Manage user accounts. Note content is never accessible from here.</p>
+        </div>
+        <div class="header-actions">
+          <a href="/mfa.html"><button type="button" class="secondary-button">My account</button></a>
+          <button type="button" class="secondary-button" id="logout-button">Log out</button>
+        </div>
+      </header>
+
+      <div id="status-message" class="status-message" role="alert" aria-live="polite"></div>
+
+      <div id="loading-state" class="loading-state">Loading users...</div>
+      <div id="empty-state" class="empty-state hidden">No users found.</div>
+
+      <table id="users-table" class="data-table hidden">
+        <thead>
+          <tr>
+            <th>Username</th>
+            <th>Email</th>
+            <th>Role</th>
+            <th>Status</th>
+            <th>MFA</th>
+            <th>Created</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="users-table-body"></tbody>
+      </table>
+
+      <div class="pagination-controls">
+        <button type="button" class="secondary-button" id="prev-page-button">Previous</button>
+        <span id="page-indicator"></span>
+        <button type="button" class="secondary-button" id="next-page-button">Next</button>
+      </div>
+    </main>
+
+    <div id="confirm-dialog" class="confirm-dialog hidden">
+      <div class="confirm-dialog-card">
+        <p id="confirm-dialog-text"></p>
+        <div class="confirm-dialog-actions">
+          <button type="button" class="secondary-button" id="confirm-cancel-button">Cancel</button>
+          <button type="button" class="danger-button" id="confirm-accept-button">Confirm</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="/js/admin.js"></script>
+  </body>
+</html>
