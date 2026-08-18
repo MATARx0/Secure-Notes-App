@@ -34,4 +34,8 @@ Thumbs.db
 .snyk-token
 snyk-token*
 
-# Keep final redacted evidence under scans/ tracked.
+# Keep the reviewed, redacted evidence under scans/ tracked (for example
+# scans/remediation-log.md), but never raw tool output, which can contain
+# absolute paths, environment dumps, or a token echoed by a failing command.
+scans/raw/
+*.sarif

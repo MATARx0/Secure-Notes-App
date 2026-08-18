@@ -1,0 +1,151 @@
+name: Security and Tests
+
+# The pipeline that has to stay green before anything merges:
+#   1. test          — the full Jest suite, including the security tests
+#   2. dependencies  — npm audit for known-vulnerable packages
+#   3. snyk          — Snyk dependency scanning (skipped when no token is set)
+#   4. secrets       — a cheap guard against committed .env files and keys
+#
+# Findings and their disposition are recorded in scans/remediation-log.md.
+
+on:
+  push:
+    branches:
+      - main
+      - 'feature/**'
+      - 'integration/**'
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      # `npm ci` installs strictly from package-lock.json, so CI can never
+      # silently resolve a different (possibly compromised) version than the
+      # one the team reviewed.
+      - name: Install dependencies
+        run: npm ci
+
+      # mongodb-memory-server downloads a MongoDB binary on first use and
+      # caches it, which saves roughly a minute on every subsequent run.
+      - name: Cache the MongoDB binary used by mongodb-memory-server
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/mongodb-binaries
+          key: mongodb-binaries-${{ runner.os }}
+
+      - name: Run the test suite
+        run: npm test
+        env:
+          NODE_ENV: test
+          CI: true
+
+  dependencies:
+    name: Dependency audit (npm)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Fails the job on a high or critical advisory in runtime dependencies.
+      # Development-only packages are audited separately and reported without
+      # blocking, since they never reach the deployed application.
+      - name: Audit runtime dependencies
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Audit development dependencies (report only)
+        run: npm audit --audit-level=high || true
+
+  snyk:
+    name: Snyk dependency scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    env:
+      SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      # A fork or a freshly cloned repository has no SNYK_TOKEN secret. The
+      # job reports that clearly and passes rather than failing for a reason
+      # that has nothing to do with the code under review.
+      - name: Report missing token
+        if: env.SNYK_TOKEN == ''
+        run: echo "SNYK_TOKEN is not configured for this repository — skipping the Snyk scan."
+
+      - name: Set up Node.js
+        if: env.SNYK_TOKEN != ''
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install dependencies
+        if: env.SNYK_TOKEN != ''
+        run: npm ci
+
+      - name: Run Snyk
+        if: env.SNYK_TOKEN != ''
+        uses: snyk/actions/node@master
+        with:
+          args: --severity-threshold=high --all-projects
+
+  secrets:
+    name: Committed secret check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      # Deliberately simple and dependency-free. This is a backstop for the
+      # single most damaging mistake in a project like this (committing a
+      # real .env), not a replacement for a full secret-scanning product.
+      # GitHub's own push protection remains the primary control.
+      - name: Fail if a real .env file is tracked
+        run: |
+          if git ls-files --error-unmatch .env >/dev/null 2>&1; then
+            echo "::error::A real .env file is committed to the repository. Remove it, rotate every secret it contained, and rely on .env.example instead."
+            exit 1
+          fi
+          echo "No tracked .env file — good."
+
+      - name: Fail if a private key is tracked
+        run: |
+          matches=$(git grep -lE 'BEGIN (RSA|EC|OPENSSH|PGP|DSA)? ?PRIVATE KEY' -- . ':!*.md' ':!.github/**' || true)
+          if [ -n "$matches" ]; then
+            echo "::error::A private key appears to be committed in: $matches"
+            exit 1
+          fi
+          echo "No committed private keys — good."

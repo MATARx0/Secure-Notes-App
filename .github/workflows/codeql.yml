@@ -1,0 +1,55 @@
+name: CodeQL
+
+# Static application security testing (SAST). CodeQL analyses the JavaScript
+# source for injection, authentication, cryptography and data-flow issues and
+# publishes results to the repository's Security > Code scanning tab.
+#
+# Required repository setting: Settings > Code security > Code scanning must
+# be enabled for the alerts to appear. Findings and their disposition are
+# recorded in scans/remediation-log.md.
+
+on:
+  push:
+    branches:
+      - main
+      - 'feature/**'
+      - 'integration/**'
+  pull_request:
+    branches:
+      - main
+  schedule:
+    # Weekly re-scan so newly published CodeQL queries are applied to code
+    # that has not changed. Mondays at 06:00 UTC.
+    - cron: '0 6 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: Analyse JavaScript
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    permissions:
+      contents: read
+      actions: read
+      # Required so the workflow can upload results to code scanning.
+      security-events: write
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Initialise CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+          # security-extended adds lower-severity and precision-tuned queries
+          # on top of the default security suite.
+          queries: security-extended
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: '/language:javascript-typescript'
