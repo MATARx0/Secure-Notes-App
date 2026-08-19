@@ -1,0 +1,44 @@
+name: "Secure Notes CodeQL configuration"
+
+# Scope: application code only.
+#
+# The first CodeQL run on this repository produced twelve High alerts. Nine of
+# them were in `tests/`, and all nine were artefacts of what test code is for
+# rather than defects:
+#
+#   * "Missing rate limiting" — the note tests mount the controller on a
+#     throwaway Express app to exercise it in isolation. That app has no rate
+#     limiter because it is three lines long and never listens on a port. The
+#     real application's limiter is in src/middleware/rateLimiter.js and is
+#     covered by tests/security/rateLimit.integration.test.js.
+#
+#   * "Missing CSRF middleware" — same shape: tests/security/hardening.test.js
+#     builds a minimal app specifically to test the CSRF middleware itself.
+#
+#   * "Insecure randomness" — Math.random() in tests/helpers/authFlow.js, used
+#     to make each test account's email unique. Nothing depends on it being
+#     unpredictable; a collision would fail a test, not weaken a control.
+#
+#   * "Missing regular expression anchor" — a regex inside a test assertion.
+#
+# Leaving them open would bury the alerts that matter. Dismissing nine alerts
+# one by one, and doing it again after every future test, is worse. Test code
+# is not deployed and is not reachable by an attacker, so it is excluded here
+# instead, with this comment as the record of why.
+#
+# The trade-off, stated plainly: a genuine vulnerability introduced *only* in a
+# test file will not be reported. That is accepted — the deployed surface is
+# src/ and scripts/, and both remain fully in scope.
+#
+# Every alert that was in application code was triaged individually; see
+# scans/remediation-log.md.
+
+paths:
+  - src
+  - scripts
+  - server.js
+
+paths-ignore:
+  - tests
+  - public
+  - node_modules

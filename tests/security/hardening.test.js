@@ -119,6 +119,32 @@ describe('NoSQL operator sanitisation (stripMongoOperators)', () => {
     expect(response.body.body).toEqual(payload);
   });
 
+  test.each([
+    '__proto__',
+    'constructor',
+    'prototype',
+  ])('strips %s, which can reach an object prototype rather than its own data', async (key) => {
+    // No live prototype-pollution vector exists today — nothing in this
+    // application spreads or Object.assigns a request body onto an existing
+    // object, and that was verified rather than assumed. The keys are stripped
+    // regardless: "no current caller misuses it" is a property of today's
+    // callers, not of the input, and a future handler that does merge a body
+    // should not be made unsafe by one it did not write.
+    const response = await request(buildSanitiserApp())
+      .post('/echo/abc')
+      .send(JSON.parse(`{"${key}": {"polluted": 1}, "title": "ok"}`));
+
+    expect(response.body.body).toEqual({ title: 'ok' });
+  });
+
+  test('stripping a prototype key does not pollute Object.prototype', async () => {
+    await request(buildSanitiserApp())
+      .post('/echo/abc')
+      .send(JSON.parse('{"__proto__": {"pollutedByTest": "yes"}}'));
+
+    expect({}.pollutedByTest).toBeUndefined();
+  });
+
   test('sanitises the query string without reassigning Express 5\'s read-only req.query', async () => {
     const response = await request(buildSanitiserApp())
       .post('/echo/abc?$where=1&page=2')

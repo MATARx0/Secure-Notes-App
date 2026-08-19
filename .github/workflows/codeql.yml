@@ -48,6 +48,9 @@ jobs:
           # security-extended adds lower-severity and precision-tuned queries
           # on top of the default security suite.
           queries: security-extended
+          # Scopes the scan to deployed code. See that file for the full
+          # rationale and the trade-off it accepts.
+          config-file: ./.github/codeql/codeql-config.yml
 
       - name: Perform CodeQL analysis
         uses: github/codeql-action/analyze@v3

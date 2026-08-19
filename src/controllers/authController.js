@@ -104,6 +104,22 @@ async function register(req, res, next) {
   try {
     const { username, email, password } = req.body;
 
+    // Same reasoning as in login() below: restate the type invariant where the
+    // value becomes a query filter, rather than relying on middleware order.
+    if (
+      typeof username !== 'string'
+      || typeof email !== 'string'
+      || typeof password !== 'string'
+    ) {
+      const error = new Error('Validation failed');
+
+      error.statusCode = 422;
+      error.code = 'VALIDATION_ERROR';
+      error.details = [{ field: 'body', message: 'Invalid field types' }];
+
+      return next(error);
+    }
+
     const existing = await User.findOne({
       $or: [{ username }, { email }],
     })
@@ -158,6 +174,19 @@ async function register(req, res, next) {
 async function login(req, res, next) {
   try {
     const { email, password } = req.body;
+
+    // The route already guarantees these are strings — stripMongoOperators
+    // removes operator-shaped keys before routing, and express-validator's
+    // isEmail()/isString() reject anything else with 422. This check restates
+    // that guarantee locally, right where the value is about to become a
+    // query filter, because a controller should not silently depend on a
+    // middleware three files away staying mounted in the right order. It also
+    // gives a static analyser something it can actually see: CodeQL flags this
+    // line as "database query built from user-controlled sources" precisely
+    // because it cannot follow the validator chain.
+    if (typeof email !== 'string' || typeof password !== 'string') {
+      return next(genericAuthError());
+    }
 
     const user = await User.findOne({ email })
       .select('+passwordHash +mfaSecret')

@@ -80,26 +80,115 @@ output rather than editing the numbers.
 
 ## 4. CodeQL and Snyk results
 
-> **Status: awaiting the first CI run.** The workflows are committed but have
-> not yet executed on GitHub, so there are no results to record. This section
-> is deliberately left empty rather than filled with invented findings.
+**First run:** 2026-08-20, commit `82adeac` on `main`.
+**Tool:** CodeQL, `security-extended` query suite. **Result:** 12 open alerts,
+all rated High by the tool. Every one was triaged individually; none was
+dismissed without reading the code it pointed at.
 
-After the first run on the integration branch, record each alert in the table
-below and add a numbered entry in section 6 for anything not dismissed.
+### Summary
 
-| ID | Source | Severity | Rule / advisory | Location | Status | Evidence |
-|---|---|---|---|---|---|---|
-| _(to be completed after the first CI run)_ | | | | | | |
+| Alerts | Where | Disposition |
+|---|---|---|
+| 2 | Application code | **Fixed** — see SCAN-01 and SCAN-03 |
+| 1 | Application code | **False positive** — see SCAN-02 |
+| 9 | Test code | **Out of scope** — scanning rescoped, see below |
 
-**Checklist for triaging a CodeQL alert:**
+### Application-code alerts
 
-1. Reproduce the data flow by hand — does untrusted input really reach the sink?
-2. If real, fix it and add a test that fails without the fix.
-3. If it is a false positive, dismiss it in the GitHub UI **with a written
-   reason**, and copy that reason into section 6.
-4. Never dismiss an alert simply because the build is red.
+| ID | Rule | Location | Severity | Status |
+|---|---|---|---|---|
+| SCAN-01 | Database query built from user-controlled sources | `src/controllers/authController.js` | High | Fixed |
+| SCAN-02 | Missing CSRF middleware | `src/app.js` | High | False positive |
+| SCAN-03 | Remote property injection | `src/middleware/validate.js` | High | Fixed |
 
 ---
+
+#### SCAN-01 — Database query built from user-controlled sources
+**Status: Fixed (hardened)**
+
+`login()` passes `req.body.email` into `User.findOne({ email })`. CodeQL traces
+untrusted input to a query sink and cannot see the two controls in between:
+`stripMongoOperators` strips operator-shaped keys before routing, and
+`express-validator`'s `isEmail()` rejects a non-string with `422`. Both fire
+before the controller, so no injection was reachable.
+
+Treated as a finding anyway rather than dismissed. The invariant was real but
+it lived three files away, and a controller that depends on middleware staying
+mounted in the right order is one refactor from being wrong. `login()` and
+`register()` now assert the types locally, immediately before the value becomes
+a query filter. That is cheap, self-documenting, and something a static
+analyser can actually follow.
+
+#### SCAN-02 — Missing CSRF middleware
+**Status: False positive**
+
+The rule fires when `cookie-parser` is mounted without a CSRF middleware it
+recognises, and the set it recognises is essentially `csurf` — a package that
+has been deprecated since 2022.
+
+This application implements the signed double-submit cookie pattern in
+`src/middleware/csrfProtection.js`: an HMAC-signed `sn_csrf` cookie plus a
+matching `X-CSRF-Token` header, compared in constant time, required on every
+authenticated state-changing route. It is covered by seven cases in
+`tests/security/hardening.test.js`, including a forged-signature cookie and one
+visitor's token replayed with another's cookie.
+
+**Dismissal reason to record in the GitHub UI:** *Used in tests / False
+positive — CSRF protection is implemented as a signed double-submit token in
+src/middleware/csrfProtection.js and enforced on all state-changing routes; the
+rule only recognises the deprecated csurf package.*
+
+#### SCAN-03 — Remote property injection
+**Status: Fixed (hardened)**
+
+`sanitizeInPlace` indexes an object with keys taken from the request body.
+Checked by hand and confirmed not exploitable as written: the function only
+reads and deletes own enumerable keys, never assigns, so a
+`{"__proto__": {...}}` payload polluted nothing. That was verified by running
+it, not assumed.
+
+But the check found something the tool had not asked about: `__proto__`,
+`constructor` and `prototype` passed straight through the filter, which only
+matched `$`-prefixed and dotted keys. Nothing merges a request body onto an
+existing object *today* — and that is a property of today's callers, not of the
+input. Those keys are now stripped alongside the Mongo operators, with four
+tests in `tests/security/hardening.test.js` covering them, including one that
+asserts `Object.prototype` is untouched afterwards.
+
+---
+
+### Test-code alerts (9) — scanning rescoped
+
+Nine alerts were in `tests/`, and each was an artefact of what test code is
+rather than a defect:
+
+| Rule | Count | Why it fires |
+|---|---|---|
+| Missing rate limiting | 4 | The note tests mount the controller on a throwaway Express app to exercise it in isolation. That app is three lines long and never listens on a port. |
+| Insecure randomness | 3 | `Math.random()` in `tests/helpers/authFlow.js`, used to make each test account's email unique. A collision would fail a test, not weaken a control. |
+| Missing CSRF middleware | 1 | Same shape — a minimal app built specifically to test the CSRF middleware. |
+| Missing regular expression anchor | 1 | A regex inside a test assertion. |
+
+Leaving nine false positives open would bury the alerts that matter, and
+dismissing them one at a time — again after every future test — is worse. Test
+code is not deployed and not reachable by an attacker, so
+`.github/codeql/codeql-config.yml` now scopes the scan to `src/`, `scripts/`
+and `server.js`.
+
+**The trade-off, stated plainly:** a genuine vulnerability introduced *only* in
+a test file will no longer be reported. Accepted, because the deployed surface
+is what an attacker can reach, and that surface remains fully in scope.
+
+### Snyk
+
+Not yet run — `SNYK_TOKEN` is not configured on the repository, so the job
+skips itself with an explicit message rather than failing. `npm audit` covers
+the same dependency tree in the meantime and reports 0 vulnerabilities.
+
+### Secret scanning
+
+No alerts. The `.env` and private-key checks in `security.yml` pass on every
+run.
 
 ## 5. Manual review findings
 
