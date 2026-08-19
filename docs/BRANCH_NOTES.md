@@ -1,32 +1,44 @@
 # Branch Notes
 
-How the work on this repository is divided, and why the branches are stacked
-the way they are. Written so a reviewer can tell at a glance who wrote what.
+How the work on this repository is divided, and how the branches relate to each
+other. Written so a reviewer can tell at a glance who wrote what.
 
-## Branch order
+## Branch layout
 
 ```
-main (foundation)
- └── feature/member-2-secure-notes      Member 2 — notes and cryptography
-      └── feature/member-1-identity     Member 1 — identity, auth, sessions   ← you are here
-           └── feature/member-3-platform-admin   Member 3 — hardening, admin, DevSecOps
-                └── integration/final-testing
+main  (foundation + the shared AES-256-GCM encryption utility)
+ ├── feature/member-1-identity          Member 1 — identity, auth, sessions   ← you are here
+ ├── feature/member-2-secure-notes      Member 2 — notes and cryptography
+ └── feature/member-3-platform-admin    Member 3 — hardening, admin, DevSecOps
 ```
 
-The team's workflow document lists the merge order as Member 1 → Member 2 →
-Member 3. The branches are stacked in a different order for one concrete
-reason: **Member 1's work depends on Member 2's encryption utility.**
+Merge order, exactly as the team workflow document specifies:
 
-TOTP secrets must be encrypted before they are stored, and
-`src/utils/encryption.js` (AES-256-GCM) is Member 2's deliverable. Member 2's
-branch was already complete and pushed, so branching Member 1's work from it —
-rather than from the bare foundation — means this branch is a real, runnable,
-testable state instead of one that cannot start. Member 3's branch then
-depends on both: it needs Member 1's `User` model and `requireAuth`, and
-Member 2's `Note` model for the admin cascade delete.
+```
+Foundation → Member 1 → Member 2 → Member 3
+```
 
-The final merge into `main` still follows the documented order; only the
-development stacking differs.
+Every branch sits directly on `main` and runs on its own.
+
+## Why the encryption utility sits in the foundation
+
+`src/utils/encryption.js` was written by Member 2 as part of the Secure Notes
+work, and it turned out to have **two** consumers rather than one:
+
+- Member 2 encrypts note content with it.
+- Member 1 encrypts TOTP secrets with it, so an MFA seed is never stored in
+  plaintext.
+
+That makes it shared infrastructure rather than a feature-branch file, and it
+depends on nothing in the project — only Node's built-in `crypto` module. It
+was therefore promoted to `main` on its own, in PR #3, **authored by Member 2**,
+before any feature branch merged.
+
+This was a deliberate team decision taken after the dependency surfaced during
+implementation, not an accident of ordering. Without it, merging Member 1's
+work first — as the workflow document requires — would put a
+`require('../utils/encryption')` on `main` with nothing behind it, and the
+application would fail to start.
 
 ## What is on this branch (Member 1)
 
@@ -41,10 +53,10 @@ development stacking differs.
 
 ## Shared platform files carried on this branch
 
-The API contract (Table 5) requires CAPTCHA and rate limiting on
-registration and login, and CSRF protection on logout and the MFA management
-routes. Those middlewares are Member 3's deliverables, but the authentication
-routes cannot be wired — or tested — without them.
+The API contract (Table 5) requires CAPTCHA and rate limiting on registration
+and login, and CSRF protection on logout and the MFA management routes. Those
+middlewares are Member 3's deliverables, but the authentication routes cannot
+be wired — or tested — without them.
 
 Rather than duplicating them or leaving the routes unprotected, the following
 files are carried on this branch in the state Member 1 needs. **Member 3 is
@@ -66,8 +78,8 @@ their author and owner**; the authoritative, complete versions live on
 
 Attribution is preserved in the source: each of these files carries a header
 comment describing its purpose and the phase of Member 3's task it belongs to,
-and the contribution table in the README on Member 3's branch lists them
-under Member 3.
+and the contribution table in the README on Member 3's branch lists them under
+Member 3.
 
 ## Not on this branch
 
@@ -85,5 +97,11 @@ npm run dev
 npm test
 ```
 
-`npm test` needs internet access on its first run: `mongodb-memory-server`
-downloads a MongoDB binary and caches it under `~/.cache/mongodb-binaries`.
+`npm test` uses `mongodb-memory-server`, which downloads a MongoDB binary on
+its first run. If that host is unreachable on your network — it is blocked on
+plenty of them — point the tests at any MongoDB you already have instead. No
+download happens on that path:
+
+```bash
+TEST_MONGO_URI=mongodb://127.0.0.1:27017 npm test
+```
