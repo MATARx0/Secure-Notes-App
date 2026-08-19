@@ -441,3 +441,48 @@ describe('No HTML page carries an inline script or handler', () => {
     expect(offenders).toEqual([]);
   });
 });
+
+describe('Every frontend script that writes also sends a CSRF token', () => {
+  // This guards a gap no API test can see. The integration tests in
+  // tests/notes/notesPipeline.integration.test.js attach the X-CSRF-Token
+  // header themselves, so they prove the *server* enforces it — and stay green
+  // even when a page never sends it. That is exactly what happened:
+  // public/js/notes.js reached production with credentials: 'include' but no
+  // token, so every create, update and delete answered
+  // "403 CSRF cookie is missing" in the browser while the whole suite passed.
+  //
+  // A static check closes the loop cheaply. If a script contains a
+  // state-changing HTTP method, it has to mention the header somewhere.
+  //
+  // Deliberately coarse: it proves the token is wired up, not that it is
+  // attached to the right call. Something is better than the nothing that let
+  // this ship, and a browser-level test for the real thing would need a DOM,
+  // a running server and a fixture user for every page.
+
+  const FRONTEND_DIR = path.join(__dirname, '..', '..', 'public', 'js');
+  const WRITE_METHOD = /'(POST|PUT|PATCH|DELETE)'/;
+
+  function scriptFiles() {
+    return fs.readdirSync(FRONTEND_DIR).filter((name) => name.endsWith('.js'));
+  }
+
+  function read(name) {
+    return fs.readFileSync(path.join(FRONTEND_DIR, name), 'utf8');
+  }
+
+  test('at least one script performs a state-changing request', () => {
+    const writers = scriptFiles().filter((name) => WRITE_METHOD.test(read(name)));
+
+    expect(writers.length).toBeGreaterThan(0);
+  });
+
+  test('no script issues a write without referencing X-CSRF-Token', () => {
+    const offenders = scriptFiles().filter((name) => {
+      const source = read(name);
+
+      return WRITE_METHOD.test(source) && !source.includes('X-CSRF-Token');
+    });
+
+    expect(offenders).toEqual([]);
+  });
+});
