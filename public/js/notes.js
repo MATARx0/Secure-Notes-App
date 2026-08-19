@@ -35,38 +35,66 @@ function closeEditor() {
   clearMessage();
 }
 
+// Built with createElement and textContent rather than an innerHTML template.
+//
+// The earlier version interpolated note.title straight into innerHTML, so a
+// note saved with the title `<img src=x onerror=...>` was parsed as markup
+// when the list rendered — stored XSS, sitting in the database rather than
+// reflected off a URL.
+//
+// It was not exploitable as shipped: the Content Security Policy sets
+// script-src 'self' with no 'unsafe-inline', which blocks inline event
+// handlers, and img-src 'self' data:, which blocks the usual exfiltration
+// image. But a CSP is the second line of defence, not the first. Any future
+// relaxation of that header would silently re-open the hole, and by then the
+// payload is already stored. Assigning through textContent means the value can
+// never be markup at all, whatever the CSP happens to say.
+//
+// Listeners are attached to each button as it is built, which also removes the
+// need to round-trip the note id through a data attribute and read it back.
+function createNoteCard(note) {
+  const card = document.createElement('article');
+  card.className = 'note-card';
+  card.dataset.id = note.id;
+
+  const heading = document.createElement('h3');
+  heading.textContent = note.title;
+
+  const updated = document.createElement('p');
+  updated.textContent = `Updated: ${new Date(note.updatedAt).toLocaleString()}`;
+
+  const actions = document.createElement('div');
+  actions.className = 'note-card-actions';
+
+  const openButton = document.createElement('button');
+  openButton.type = 'button';
+  openButton.className = 'primary-button';
+  openButton.textContent = 'Open';
+  openButton.addEventListener('click', () => openExistingNote(note.id));
+
+  const deleteButton = document.createElement('button');
+  deleteButton.type = 'button';
+  deleteButton.className = 'secondary-button';
+  deleteButton.textContent = 'Delete';
+  deleteButton.addEventListener('click', () => deleteNote(note.id));
+
+  actions.append(openButton, deleteButton);
+  card.append(heading, updated, actions);
+
+  return card;
+}
+
 function renderNotes(notes) {
+  notesContainer.replaceChildren();
+
   if (!notes || notes.length === 0) {
-    notesContainer.innerHTML = '<p>No notes yet.</p>';
+    const empty = document.createElement('p');
+    empty.textContent = 'No notes yet.';
+    notesContainer.append(empty);
     return;
   }
 
-  notesContainer.innerHTML = notes
-    .map(
-      (note) => `
-        <article class="note-card" data-id="${note.id}">
-          <h3>${note.title}</h3>
-          <p>Updated: ${new Date(note.updatedAt).toLocaleString()}</p>
-          <div class="note-card-actions">
-            <button type="button" class="primary-button" data-action="open" data-id="${note.id}">
-              Open
-            </button>
-            <button type="button" class="secondary-button" data-action="delete" data-id="${note.id}">
-              Delete
-            </button>
-          </div>
-        </article>
-      `,
-    )
-    .join('');
-
-  notesContainer.querySelectorAll('[data-action="open"]').forEach((button) => {
-    button.addEventListener('click', () => openExistingNote(button.dataset.id));
-  });
-
-  notesContainer.querySelectorAll('[data-action="delete"]').forEach((button) => {
-    button.addEventListener('click', () => deleteNote(button.dataset.id));
-  });
+  notesContainer.append(...notes.map(createNoteCard));
 }
 
 async function loadNotes() {

@@ -7,9 +7,20 @@
       content="width=device-width, initial-scale=1.0"
     />
     <title>Secure Notes</title>
+    <!-- Shared platform stylesheet (site-header/nav below), additive to the
+         existing notes.css and defined so it never overrides its rules. -->
+    <link rel="stylesheet" href="/css/styles.css" />
     <link rel="stylesheet" href="/css/notes.css" />
   </head>
   <body>
+    <header class="site-header">
+      <nav class="site-nav">
+        <span class="site-nav-brand">Secure Notes</span>
+        <a href="/mfa.html">Security</a>
+        <button type="button" id="logout-button" class="secondary-button">Log out</button>
+      </nav>
+    </header>
+
     <main class="page-container">
       <header class="dashboard-header">
         <div>
@@ -64,6 +75,7 @@
       </section>
     </main>
 
+    <script src="/js/nav.js"></script>
     <script src="/js/notes.js"></script>
   </body>
 </html>

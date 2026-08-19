@@ -3,6 +3,13 @@ const {
   encrypt,
   decrypt,
 } = require('../utils/encryption');
+// Small, agreed cross-branch addition (Member 3 Phase 11: "Coordinate small
+// audit-service calls with Members 1 and 2 through reviewed pull
+// requests") wiring the create/update/delete paths below into the shared
+// audit service. No existing logic, validation, or response shape below is
+// changed by this addition — see docs/STRIDE_Threat_Model.md R-01, which
+// already anticipated this exact gap.
+const { recordAuditEvent } = require('../services/auditService');
 
 async function createNote(req, res, next) {
   try {
@@ -16,6 +23,16 @@ async function createNote(req, res, next) {
       encryptedContent: encrypted.encryptedContent,
       iv: encrypted.iv,
       authTag: encrypted.authTag,
+    });
+
+    await recordAuditEvent({
+      actorId: req.user.id,
+      actorRole: req.user.role,
+      action: 'note.create',
+      targetType: 'Note',
+      targetId: note._id,
+      outcome: 'success',
+      requestId: req.id,
     });
 
     return res.status(201).json({
@@ -63,7 +80,7 @@ async function getMyNotes(req, res, next) {
 async function getNoteById(req, res, next) {
   try {
     const note = await Note.findOne({
-      _id: req.params.id,
+      _id: req.params.noteId,
       owner: req.user.id,
     });
 
@@ -119,7 +136,7 @@ async function updateNote(req, res, next) {
 
     const note = await Note.findOneAndUpdate(
       {
-        _id: req.params.id,
+        _id: req.params.noteId,
         owner: req.user.id,
       },
       
@@ -148,6 +165,16 @@ async function updateNote(req, res, next) {
       authTag: note.authTag,
     });
 
+    await recordAuditEvent({
+      actorId: req.user.id,
+      actorRole: req.user.role,
+      action: 'note.update',
+      targetType: 'Note',
+      targetId: note._id,
+      outcome: 'success',
+      requestId: req.id,
+    });
+
     return res.status(200).json({
       success: true,
       message: 'Note updated successfully',
@@ -168,7 +195,7 @@ async function updateNote(req, res, next) {
 async function deleteNote(req, res, next) {
   try {
     const note = await Note.findOneAndDelete({
-      _id: req.params.id,
+      _id: req.params.noteId,
       owner: req.user.id,
     });
 
@@ -180,6 +207,16 @@ async function deleteNote(req, res, next) {
 
       return next(error);
     }
+
+    await recordAuditEvent({
+      actorId: req.user.id,
+      actorRole: req.user.role,
+      action: 'note.delete',
+      targetType: 'Note',
+      targetId: note._id,
+      outcome: 'success',
+      requestId: req.id,
+    });
 
     return res.status(200).json({
       success: true,

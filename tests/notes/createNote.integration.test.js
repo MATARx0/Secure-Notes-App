@@ -89,7 +89,7 @@ describe('POST /api/notes', () => {
         content: 'Valid content',
       });
 
-    expect(response.status).toBe(400);
+    expect(response.status).toBe(422);
     expect(response.body.success).toBe(false);
     expect(response.body.error.code).toBe('VALIDATION_ERROR');
   });
@@ -102,7 +102,7 @@ describe('POST /api/notes', () => {
         content: '',
       });
 
-    expect(response.status).toBe(400);
+    expect(response.status).toBe(422);
     expect(response.body.success).toBe(false);
     expect(response.body.error.code).toBe('VALIDATION_ERROR');
   });
@@ -115,7 +115,7 @@ describe('POST /api/notes', () => {
         content: 'Valid content',
       });
 
-    expect(response.status).toBe(400);
+    expect(response.status).toBe(422);
     expect(response.body.error.code).toBe('VALIDATION_ERROR');
   });
 
@@ -128,7 +128,7 @@ describe('POST /api/notes', () => {
         owner: new mongoose.Types.ObjectId().toString(),
       });
 
-    expect(response.status).toBe(400);
+    expect(response.status).toBe(422);
     expect(response.body.error.code).toBe('VALIDATION_ERROR');
 
     const noteCount = await Note.countDocuments();

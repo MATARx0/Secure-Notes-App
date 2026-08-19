@@ -10,6 +10,7 @@ const adminRoutes = require('./routes/adminRoutes');
 const notFound = require('./middleware/notFound');
 const errorHandler = require('./middleware/errorHandler');
 const requestLogger = require('./middleware/requestLogger');
+const { stripMongoOperators } = require('./middleware/validate');
 const { generalLimiter } = require('./middleware/rateLimiter');
 const { issueCsrfToken } = require('./middleware/csrfProtection');
 
@@ -94,6 +95,13 @@ app.use(express.json({
 }));
 
 app.use(cookieParser());
+
+// NoSQL operator-injection mitigation: strips any object key starting with
+// "$" or containing "." from the request body and query string, so a
+// crafted payload can never reach Mongoose as a query operator. See
+// src/middleware/validate.js for why body and query need different handling
+// under Express 5.
+app.use(stripMongoOperators);
 
 app.use(requestLogger);
 
