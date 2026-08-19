@@ -18,6 +18,23 @@ const encryptedSecretSchema = new mongoose.Schema(
   { _id: false },
 );
 
+// Note on projection: `select: false` is set ONCE, on the parent `mfaSecret`
+// path below, and deliberately NOT repeated on `pending` and `enabled`.
+//
+// Repeating it here looks like defence in depth but silently breaks the
+// feature. Mongoose applies a sub-path's `select: false` independently of the
+// parent's, so `.select('+mfaSecret')` would re-include the parent while
+// still excluding both children — every controller would receive an empty
+// `mfaSecret: {}` and conclude no secret had ever been stored. That produced
+// eight failing MFA tests: enrolment appeared to work, confirmation then
+// answered 400 MFA_SETUP_NOT_STARTED, and MFA could never be switched on.
+// Opting the children back in would have meant writing
+// `.select('+mfaSecret.pending +mfaSecret.enabled')` at every call site —
+// one forgotten `+` away from the same bug.
+//
+// The parent's `select: false` is the real control and is sufficient: a query
+// that does not ask for `mfaSecret` never loads any part of it. The toJSON /
+// toObject transforms below strip it a second time regardless.
 const mfaSecretSchema = new mongoose.Schema(
   {
     // Set as soon as POST /api/auth/mfa/setup generates a TOTP secret, but
@@ -25,14 +42,12 @@ const mfaSecretSchema = new mongoose.Schema(
     pending: {
       type: encryptedSecretSchema,
       default: undefined,
-      select: false,
     },
     // Only set once enrollment is confirmed; this is the secret actually
     // used to verify TOTP codes at login.
     enabled: {
       type: encryptedSecretSchema,
       default: undefined,
-      select: false,
     },
   },
   { _id: false },
