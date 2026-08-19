@@ -102,7 +102,30 @@ async function deleteUser(req, res, next) {
       }
     }
 
-    let transactionSucceeded = false;
+    // Removing an account and its notes should be all-or-nothing, so the
+    // preferred path is a multi-document transaction. Those require a replica
+    // set or a sharded cluster; a standalone mongod — what most people run
+    // locally — cannot do them at all.
+    //
+    // An earlier version chose whether to fall back by pattern-matching the
+    // driver's error text for "Transaction numbers|replica set|mongos". That
+    // was wrong. A standalone instance can refuse the attempt with wording
+    // those patterns do not cover, the message is not part of any stable
+    // contract, and the result was a 500 on every deletion against a
+    // standalone database.
+    //
+    // So: attempt the transaction, and fall back to sequential deletes on ANY
+    // failure. That is safe rather than lazy — both deletes are idempotent,
+    // so running them after a partly-applied transaction cannot do damage,
+    // and if the real cause was a genuine database fault the fallback fails
+    // too and that error propagates to the 500 it deserves.
+    //
+    // Residual risk on the fallback path: a crash between the two deletes
+    // could leave orphaned notes. Recorded per-event as `atomic` in the audit
+    // entry below, and in the README's known limitations. MongoDB Atlas
+    // provides a replica set by default, so a real deployment takes the
+    // atomic path.
+    let deletedAtomically = false;
 
     try {
       const session = await mongoose.startSession();
@@ -113,28 +136,18 @@ async function deleteUser(req, res, next) {
           await User.deleteOne({ _id: target._id }, { session });
         });
 
-        transactionSucceeded = true;
+        deletedAtomically = true;
       } finally {
         await session.endSession();
       }
-    } catch (transactionError) {
-      const message = String((transactionError && transactionError.message) || '');
-      const transactionsUnsupported = /Transaction numbers|replica set|mongos/i.test(message);
-
-      if (!transactionsUnsupported) {
-        throw transactionError;
-      }
-
-      // Documented fallback (Member 3 Phase 10 / Phase 15): a standalone
-      // MongoDB instance (no replica set) cannot run multi-document
-      // transactions. When that is detected, fall back to sequential
-      // deletes. Residual risk: a crash between the two operations could
-      // leave orphaned notes; acceptable for this course deployment and
-      // recommended to revisit if deployed against a replica set, which
-      // MongoDB Atlas provides by default.
+    } catch {
+      deletedAtomically = false;
     }
 
-    if (!transactionSucceeded) {
+    if (!deletedAtomically) {
+      // Notes first on purpose: if this half fails, the account still exists
+      // and the request can simply be retried. Deleting the user first and
+      // then failing would strand notes with no owner left to find them by.
       await Note.deleteMany({ owner: target._id });
       await User.deleteOne({ _id: target._id });
     }
@@ -147,6 +160,7 @@ async function deleteUser(req, res, next) {
       targetId: target._id,
       outcome: 'success',
       requestId: req.id,
+      context: { atomic: deletedAtomically },
     });
 
     return res.status(200).json({

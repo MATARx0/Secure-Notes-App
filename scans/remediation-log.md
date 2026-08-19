@@ -118,6 +118,8 @@ of them, and because the fixes are part of the security story of this project.
 | REV-07 | Medium | MFA tickets are not single-use | Accepted (risk) | DREAD DR-11 |
 | REV-08 | Medium | Account lockout can be abused to deny service | Accepted (risk) | DREAD DR-10 |
 | REV-09 | Medium | No breached-password checking at registration | Accepted (risk) | DREAD DR-13 |
+| REV-10 | High | Nested `select: false` made MFA impossible to enable | Fixed | `src/models/User.js`, `tests/auth/userProjection.test.js` |
+| REV-11 | Medium | User deletion returned 500 against a standalone MongoDB | Fixed | `src/controllers/adminController.js` |
 
 ---
 
@@ -260,6 +262,82 @@ is accepted. Complexity rules structurally cannot close this gap.
 
 **Named improvement:** the Have I Been Pwned range API (k-anonymity, so the
 password never leaves the server), or a bundled top-100k denylist.
+
+---
+
+### REV-10 — Nested `select: false` made MFA impossible to enable
+**Severity: High · Status: Fixed**
+
+**What was wrong.** `mfaSecret` is `select: false` so it never loads by
+accident, and the MFA controllers opt back in with `.select('+mfaSecret')`.
+The sub-fields `pending` and `enabled` carried `select: false` as well, which
+reads like defence in depth and is not: Mongoose applies a sub-path's
+exclusion independently of its parent's. The opt-in therefore re-included the
+parent while still excluding both children, so every controller received
+`mfaSecret: {}`, concluded that no secret had ever been stored, and answered
+`400 MFA_SETUP_NOT_STARTED`. Multi-factor authentication could not be switched
+on at all.
+
+**Why review missed it.** Nothing looks wrong in isolation. The model is
+correct on its own, each controller opts in exactly as intended, and the
+interaction only appears in the projection Mongoose builds at query time.
+
+**How it was found.** The first execution of the database-backed suite on a
+machine with a working MongoDB. Eight MFA tests failed together, in a cascade
+that pointed at the wrong place: confirmation returned 400, so `mfaEnabled`
+stayed false, so login never issued a ticket, so `verify-login` failed
+validation with 422, so disabling reported `MFA_NOT_ENABLED`. One root cause,
+four different status codes.
+
+**Fix.** `select: false` is now set once, on the parent path only. Verified by
+inspecting the projection Mongoose actually generates:
+
+```
+before   .select('+mfaSecret') -> { "mfaSecret.pending": 0, "mfaSecret.enabled": 0 }
+after    .select('+mfaSecret') -> { "passwordHash": 0 }
+after    no .select()          -> { "passwordHash": 0, "mfaSecret": 0 }
+```
+
+The last line is the point: the secret is still hidden by default, so the
+security property is unchanged — only the opt-in works now.
+
+A second bug was found in the same area while fixing it: `setupMfa` queried
+without `+mfaSecret`, so the spread that merges the new pending secret saw
+`undefined` and would have erased an existing confirmed `enabled` secret,
+locking out any user who reopened the enrolment page while MFA was already on.
+It now selects the field and merges via `toObject()` rather than spreading a
+Mongoose subdocument.
+
+**Regression guard.** `tests/auth/userProjection.test.js` asserts against the
+generated projection directly — no database, 11 cases, runs in a second.
+Confirmed to fail when the nested `select: false` is reintroduced and to pass
+when it is not.
+
+---
+
+### REV-11 — Deleting a user returned 500 against a standalone MongoDB
+**Severity: Medium · Status: Fixed**
+
+**What was wrong.** Deleting an account removes its notes in a transaction so
+the operation is all-or-nothing. Transactions need a replica set, so the code
+carried a fallback to sequential deletes — but it decided when to use it by
+pattern-matching the driver's error text for
+`Transaction numbers|replica set|mongos`. A standalone `mongod` refuses the
+attempt with wording those patterns do not cover, so the error was rethrown
+and every deletion answered `500` on the setup most people run locally.
+
+**Why review missed it.** The fallback existed, was commented, and looked
+deliberate. Only the trigger condition was wrong, and it could not fire
+without a real standalone database to fail against.
+
+**Fix.** Attempt the transaction; fall back on *any* failure. This is safe
+rather than lazy: both deletes are idempotent, so running them after a
+partly-applied transaction cannot do damage, and a genuine database fault
+fails the fallback too and propagates to the 500 it deserves. Which path ran
+is now recorded per event as `atomic` in the audit entry, so the weaker
+guarantee is visible in the trail rather than assumed. The fallback deletes
+notes before the user, so a failure leaves a retryable state instead of
+orphaned notes.
 
 ---
 
