@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0"
+    />
+    <title>Secure Notes</title>
+    <link rel="stylesheet" href="/css/notes.css" />
+  </head>
+  <body>
+    <main class="page-container">
+      <header class="dashboard-header">
+        <div>
+          <h1>Secure Notes</h1>
+          <p>Your private encrypted notes</p>
+        </div>
+        <button id="new-note-button" class="primary-button" type="button">
+          New Note
+        </button>
+      </header>
+
+      <section id="editor" class="note-editor hidden" aria-live="polite">
+        <h2 id="editor-title">Create Note</h2>
+
+        <div id="status-message" class="status-message" aria-live="polite"></div>
+
+        <form id="note-form">
+          <input id="note-id" type="hidden" name="noteId" />
+
+          <div class="form-group">
+            <label for="note-title">Title</label>
+            <input
+              id="note-title"
+              name="title"
+              type="text"
+              maxlength="120"
+              placeholder="Enter note title"
+            />
+          </div>
+
+          <div class="form-group">
+            <label for="note-content">Content</label>
+            <textarea
+              id="note-content"
+              name="content"
+              rows="7"
+              placeholder="Write your note here..."
+            ></textarea>
+          </div>
+
+          <div class="form-actions">
+            <button type="submit" class="primary-button">Save</button>
+            <button type="button" id="cancel-button" class="secondary-button">
+              Cancel
+            </button>
+          </div>
+        </form>
+      </section>
+
+      <section>
+        <div id="notes-container" class="notes-grid" aria-live="polite"></div>
+      </section>
+    </main>
+
+    <script src="/js/notes.js"></script>
+  </body>
+</html>
