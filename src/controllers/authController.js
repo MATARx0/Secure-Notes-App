@@ -403,7 +403,11 @@ async function logout(req, res, next) {
 
 async function setupMfa(req, res, next) {
   try {
-    const user = await User.findById(req.user.id).exec();
+    // +mfaSecret matters here even though this handler only writes `pending`.
+    // Without it the field is never loaded, the spread below sees undefined,
+    // and saving would wipe an existing confirmed `enabled` secret — locking
+    // out any user who re-opened the enrolment page while MFA was already on.
+    const user = await User.findById(req.user.id).select('+mfaSecret').exec();
 
     if (!user) {
       const error = new Error('Session is no longer valid');
@@ -417,8 +421,13 @@ async function setupMfa(req, res, next) {
     const secret = authenticator.generateSecret();
     const encryptedSecret = encrypt(secret);
 
+    // toObject() rather than a bare spread: user.mfaSecret is a Mongoose
+    // subdocument, and spreading one copies its internal machinery instead of
+    // its fields.
+    const existingSecret = user.mfaSecret ? user.mfaSecret.toObject() : {};
+
     user.mfaSecret = {
-      ...user.mfaSecret,
+      ...existingSecret,
       pending: encryptedSecret,
     };
 
