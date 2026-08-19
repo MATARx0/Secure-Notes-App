@@ -110,7 +110,7 @@ Example:
 
 ```javascript
 Note.findOne({
-  _id: req.params.id,
+  _id: req.params.noteId,
   owner: req.user.id,
 });
 ```
