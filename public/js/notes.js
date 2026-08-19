@@ -97,6 +97,37 @@ function renderNotes(notes) {
   notesContainer.append(...notes.map(createNoteCard));
 }
 
+// Every state-changing request has to carry the CSRF token, or
+// verifyCsrfToken rejects it with 403 before the controller is ever reached.
+//
+// GET /api/csrf-token does two things in one call: it returns the raw token in
+// the JSON body and sets the matching signed sn_csrf cookie. The cookie rides
+// along automatically on the next request because of credentials: 'include';
+// the raw value has to be attached by hand as the X-CSRF-Token header. Both
+// halves are required, and that pairing is the entire point of a double-submit
+// token — a cross-site page can make the browser send the cookie, but cannot
+// read the response body to learn the header value.
+//
+// Fetched per write rather than cached. The cookie lasts two hours, but a
+// stale token after a logout/login cycle produces a confusing 403, and one
+// extra same-origin GET is not worth optimising away. Mirrors the same helper
+// in public/js/admin.js.
+async function csrfHeaders() {
+  const response = await fetch('/api/csrf-token', {
+    method: 'GET',
+    credentials: 'include',
+    headers: { Accept: 'application/json' },
+  });
+
+  if (!response.ok) {
+    throw new Error('Could not obtain a CSRF token. Please reload the page.');
+  }
+
+  const body = await response.json();
+
+  return { 'X-CSRF-Token': body.data.csrfToken };
+}
+
 async function loadNotes() {
   try {
     clearMessage();
@@ -160,6 +191,7 @@ async function deleteNote(noteId) {
       credentials: 'include',
       headers: {
         Accept: 'application/json',
+        ...(await csrfHeaders()),
       },
     });
 
@@ -197,6 +229,7 @@ noteForm.addEventListener('submit', async (event) => {
       headers: {
         'Content-Type': 'application/json',
         Accept: 'application/json',
+        ...(await csrfHeaders()),
       },
       body: JSON.stringify(payload),
     });

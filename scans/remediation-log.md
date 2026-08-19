@@ -212,6 +212,7 @@ of them, and because the fixes are part of the security story of this project.
 | REV-12 | High | Stored XSS sink in the note list (`innerHTML` + note title) | Fixed | `public/js/notes.js`, `tests/security/hardening.test.js` |
 | REV-13 | Low | Route parameter was `:id` in the routes but `:noteId` in the contract | Fixed | `src/routes/noteRoutes.js`, `src/controllers/noteController.js` |
 | REV-14 | Low | Note validation returned `400` where the rest of the API returns `422` | Fixed | `src/middleware/validateNote.js` |
+| REV-15 | High | Note frontend never sent the CSRF token — every write failed with 403 | Fixed | `public/js/notes.js`, `tests/security/hardening.test.js` |
 
 ---
 
@@ -522,6 +523,44 @@ which file happened to do the validating. Now it has one.
 
 The affected assertions in Member 2's three note test files were updated to
 match.
+
+---
+
+### REV-15 — The note frontend never sent the CSRF token
+**Severity: High (availability) · Status: Fixed**
+
+**What was wrong.** `public/js/notes.js` sent every request with
+`credentials: 'include'` but never called `GET /api/csrf-token` and never
+attached an `X-CSRF-Token` header. `verifyCsrfToken` therefore rejected every
+create, update and delete with `403 CSRF cookie is missing`. The notes feature —
+the point of the application — did not work in a browser at all.
+
+**How it was found.** Running the application by hand and clicking Save.
+
+**Why 155 passing tests did not catch it.** This is the interesting part, and
+it is worth stating plainly rather than glossing over.
+
+`tests/notes/notesPipeline.integration.test.js` covers this endpoint
+thoroughly, including two cases asserting that a write *without* a CSRF token
+is refused. But every test that expects success attaches the header itself,
+because supertest is not a browser and has no page to fetch one from. So the
+suite proved the server enforces CSRF correctly — which it does — and was
+completely blind to whether any page actually sends it. The server side and
+the browser side were each correct in isolation and never met.
+
+That is the same shape as the `:noteId` mismatch recorded in REV-13: two halves
+of one contract, each tested on its own, with nothing exercising the seam.
+
+**Fix.** `notes.js` now has a `csrfHeaders()` helper mirroring the one in
+`admin.js`: it fetches the token, and the raw value is spread into the headers
+of every `POST`, `PUT` and `DELETE`.
+
+**Regression guard.** `tests/security/hardening.test.js` now statically asserts
+that any script in `public/js/` containing a state-changing HTTP method also
+mentions `X-CSRF-Token`. Deliberately coarse — it proves the token is wired up,
+not that it is attached to the right call — but it turns a class of silent
+browser-only breakage into a failing test, and it was confirmed to fail when
+the fix is reverted.
 
 ---
 
