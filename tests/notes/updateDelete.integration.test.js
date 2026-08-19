@@ -31,7 +31,7 @@ function buildTestApp(userId) {
   app.use(express.json());
 
   app.put(
-    '/api/notes/:id',
+    '/api/notes/:noteId',
     createMockAuth(userId),
     validateNoteId,
     validateUpdateNote,
@@ -39,7 +39,7 @@ function buildTestApp(userId) {
   );
 
   app.delete(
-    '/api/notes/:id',
+    '/api/notes/:noteId',
     createMockAuth(userId),
     validateNoteId,
     deleteNote,
@@ -80,7 +80,7 @@ afterAll(async () => {
   await stopTestDatabase();
 });
 
-describe('PUT /api/notes/:id', () => {
+describe('PUT /api/notes/:noteId', () => {
   test('updates and re-encrypts a note owned by the user', async () => {
     const note = await createEncryptedNote({
       owner: userA,
@@ -161,7 +161,7 @@ describe('PUT /api/notes/:id', () => {
       .put(`/api/notes/${note._id}`)
       .send({});
 
-    expect(response.status).toBe(400);
+    expect(response.status).toBe(422);
     expect(response.body.error.code).toBe('VALIDATION_ERROR');
   });
 
@@ -181,7 +181,7 @@ describe('PUT /api/notes/:id', () => {
         owner: attackerId.toString(),
       });
 
-    expect(response.status).toBe(400);
+    expect(response.status).toBe(422);
     expect(response.body.error.code).toBe('VALIDATION_ERROR');
 
     const storedNote = await Note.findById(note._id);
@@ -191,7 +191,7 @@ describe('PUT /api/notes/:id', () => {
   });
 });
 
-describe('DELETE /api/notes/:id', () => {
+describe('DELETE /api/notes/:noteId', () => {
   test('deletes a note owned by the user', async () => {
     const note = await createEncryptedNote({
       owner: userA,

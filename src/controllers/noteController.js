@@ -80,7 +80,7 @@ async function getMyNotes(req, res, next) {
 async function getNoteById(req, res, next) {
   try {
     const note = await Note.findOne({
-      _id: req.params.id,
+      _id: req.params.noteId,
       owner: req.user.id,
     });
 
@@ -136,7 +136,7 @@ async function updateNote(req, res, next) {
 
     const note = await Note.findOneAndUpdate(
       {
-        _id: req.params.id,
+        _id: req.params.noteId,
         owner: req.user.id,
       },
       
@@ -195,7 +195,7 @@ async function updateNote(req, res, next) {
 async function deleteNote(req, res, next) {
   try {
     const note = await Note.findOneAndDelete({
-      _id: req.params.id,
+      _id: req.params.noteId,
       owner: req.user.id,
     });
 

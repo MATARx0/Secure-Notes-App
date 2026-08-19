@@ -30,7 +30,7 @@ function buildTestApp(userId) {
   app.get('/api/notes', createMockAuth(userId), getMyNotes);
 
   app.get(
-    '/api/notes/:id',
+    '/api/notes/:noteId',
     createMockAuth(userId),
     validateNoteId,
     getNoteById,
@@ -94,7 +94,7 @@ describe('GET /api/notes', () => {
   });
 });
 
-describe('GET /api/notes/:id', () => {
+describe('GET /api/notes/:noteId', () => {
   test('returns and decrypts a note owned by the authenticated user', async () => {
     const note = await createEncryptedNote({
       owner: userA,
@@ -130,7 +130,7 @@ describe('GET /api/notes/:id', () => {
     const app = buildTestApp(userA);
     const response = await request(app).get('/api/notes/not-a-valid-object-id');
 
-    expect(response.status).toBe(400);
+    expect(response.status).toBe(422);
     expect(response.body.error.code).toBe('INVALID_NOTE_ID');
   });
 });

@@ -120,6 +120,9 @@ of them, and because the fixes are part of the security story of this project.
 | REV-09 | Medium | No breached-password checking at registration | Accepted (risk) | DREAD DR-13 |
 | REV-10 | High | Nested `select: false` made MFA impossible to enable | Fixed | `src/models/User.js`, `tests/auth/userProjection.test.js` |
 | REV-11 | Medium | User deletion returned 500 against a standalone MongoDB | Fixed | `src/controllers/adminController.js` |
+| REV-12 | High | Stored XSS sink in the note list (`innerHTML` + note title) | Fixed | `public/js/notes.js`, `tests/security/hardening.test.js` |
+| REV-13 | Low | Route parameter was `:id` in the routes but `:noteId` in the contract | Fixed | `src/routes/noteRoutes.js`, `src/controllers/noteController.js` |
+| REV-14 | Low | Note validation returned `400` where the rest of the API returns `422` | Fixed | `src/middleware/validateNote.js` |
 
 ---
 
@@ -338,6 +341,98 @@ is now recorded per event as `atomic` in the audit entry, so the weaker
 guarantee is visible in the trail rather than assumed. The fallback deletes
 notes before the user, so a failure leaves a retryable state instead of
 orphaned notes.
+
+---
+
+### REV-12 — Stored XSS sink in the note list
+**Severity: High · Status: Fixed**
+
+**What was wrong.** `public/js/notes.js` rendered the note list by
+interpolating values into an `innerHTML` template:
+
+```js
+notesContainer.innerHTML = notes.map((note) => `
+  <h3>${note.title}</h3>
+  ...
+```
+
+`note.title` is user-supplied and was not escaped, so a note saved with the
+title `<img src=x onerror=...>` was parsed as markup every time the owner
+opened their list. Stored XSS — the payload sits in the database rather than
+being reflected off a URL, so it fires on every visit until the note is
+deleted.
+
+**Was it exploitable as shipped?** Not directly, and the reason is worth
+stating precisely rather than claiming more than is true. The Content Security
+Policy sets `script-src 'self'` with no `'unsafe-inline'`, which blocks inline
+event handlers such as `onerror`, and `img-src 'self' data:`, which blocks the
+usual exfiltration image. Notes are also owner-scoped, so the only reader is
+the author — self-XSS in the first instance.
+
+**Why fix it anyway.** The CSP is the second line of defence and it was doing
+all the work. Any future relaxation of that header — adding a CDN, adding
+`'unsafe-inline'` to get a third-party widget working — silently re-opens the
+hole, and by then the payloads are already stored. Defence that depends on one
+header staying exactly as it is today is not defence in depth.
+
+**Fix.** The list is now built with `document.createElement` and assigned
+through `textContent`, so a title can never be parsed as markup regardless of
+what the CSP says. Listeners are attached to each button as it is created,
+which also removes the round-trip of the note id through a `data-` attribute.
+
+**Regression guard.** `tests/security/hardening.test.js` statically scans
+`public/js/*.js` for `innerHTML`, `outerHTML`, `insertAdjacentHTML`,
+`document.write` and `eval`, and scans `public/*.html` for inline handlers,
+inline styles and inline `<script>` blocks. Comments are stripped first, so a
+comment explaining why `innerHTML` is avoided does not trip the check. It is a
+blunt instrument on purpose: no DOM needed, runs in milliseconds, and fails at
+the moment someone reaches for the dangerous API rather than in review later.
+
+**Credit.** Identified by Member 2 while reviewing her own frontend; fixed
+during the Member 3 integration pass so the change could be verified against
+the assembled application in one run.
+
+---
+
+### REV-13 — Route parameter name did not match the API contract
+**Severity: Low · Status: Fixed**
+
+The contract specifies `:noteId`. The routes used `:id`, and the controller and
+validator read `req.params.id`.
+
+Low severity because nothing was broken while both sides agreed — but this is
+the kind of gap that breaks *silently* when it is fixed halfway. The router
+defines the parameter and the controller reads it; change one side only and
+every note operation returns `404` with an undefined id, and **no test on
+either branch can catch it**: Member 2's tests mount the controller on a
+throwaway app of their own, and Member 3's tests only exercise the assembled
+application. The mismatch would surface after integration, at the worst
+possible time.
+
+Both halves were therefore changed together, with Member 2's agreement, and the
+full suite was run against the assembled application afterwards. The admin
+routes already used `:userId` as the contract specifies.
+
+---
+
+### REV-14 — Note validation used a different status code from the rest of the API
+**Severity: Low · Status: Fixed**
+
+`validateNote.js` returned `400` for field-validation failures. Everywhere else
+in the project the split is the one documented in `src/middleware/validate.js`
+and the API contract, section 5.5:
+
+- `400` — the request itself is malformed (unparseable body, oversized payload)
+- `422` — the request parsed fine but a field failed validation
+
+All three failures in that file are the second kind, including an invalid
+`:noteId`: the URL parsed correctly, the value in it simply is not a valid
+identifier. The admin routes already answered `422` for exactly that case via
+`param('userId').isMongoId()`, so the project had two rules that differed by
+which file happened to do the validating. Now it has one.
+
+The affected assertions in Member 2's three note test files were updated to
+match.
 
 ---
 

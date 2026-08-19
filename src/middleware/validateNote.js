@@ -1,3 +1,14 @@
+// Status codes follow the split documented in src/middleware/validate.js and
+// agreed in the team API contract (section 5.5):
+//   400 - the request itself is malformed (unparseable body, oversized payload)
+//   422 - the request parsed fine but a field failed validation
+//
+// Every failure in this file is the second kind, including an invalid :noteId:
+// the URL parsed correctly, the value in it just is not a valid identifier.
+// The admin routes already return 422 for exactly that case via
+// param('userId').isMongoId(), so this keeps one rule across the whole API
+// instead of two that differ by which file happens to validate.
+
 const ALLOWED_NOTE_FIELDS = new Set(['title', 'content']);
 
 function getUnexpectedFields(body) {
@@ -50,7 +61,7 @@ function validateCreateNote(req, res, next) {
   if (errors.length > 0) {
     const error = new Error('Validation failed');
 
-    error.statusCode = 400;
+    error.statusCode = 422;
     error.code = 'VALIDATION_ERROR';
     error.details = errors;
 
@@ -63,20 +74,20 @@ function validateCreateNote(req, res, next) {
 }
 
 function validateNoteId(req, res, next) {
-  const { id } = req.params;
+  const { noteId } = req.params;
 
   const objectIdPattern =
     /^[0-9a-fA-F]{24}$/;
 
   if (
-    typeof id !== 'string'
-    || !objectIdPattern.test(id)
+    typeof noteId !== 'string'
+    || !objectIdPattern.test(noteId)
   ) {
     const error = new Error(
       'Invalid note identifier',
     );
 
-    error.statusCode = 400;
+    error.statusCode = 422;
     error.code = 'INVALID_NOTE_ID';
 
     return next(error);
@@ -142,7 +153,7 @@ function validateUpdateNote(req, res, next) {
   if (errors.length > 0) {
     const error = new Error('Validation failed');
 
-    error.statusCode = 400;
+    error.statusCode = 422;
     error.code = 'VALIDATION_ERROR';
     error.details = errors;
 

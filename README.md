@@ -291,9 +291,9 @@ All responses use one of two envelopes:
 | `POST` | `/api/auth/mfa/disable` | yes | yes | Requires password **and** a valid TOTP code |
 | `GET` | `/api/notes` | yes | — | Owner-scoped, no ciphertext in the list |
 | `POST` | `/api/notes` | yes | yes | |
-| `GET` | `/api/notes/:id` | yes | — | |
-| `PUT` | `/api/notes/:id` | yes | yes | |
-| `DELETE` | `/api/notes/:id` | yes | yes | |
+| `GET` | `/api/notes/:noteId` | yes | — | |
+| `PUT` | `/api/notes/:noteId` | yes | yes | |
+| `DELETE` | `/api/notes/:noteId` | yes | yes | |
 | `GET` | `/api/admin/users` | admin | — | Paginated, safe fields only |
 | `DELETE` | `/api/admin/users/:userId` | admin | yes | Also deletes the user's notes |
 | `PATCH` | `/api/admin/users/:userId/status` | admin | yes | `"enabled"` or `"disabled"` |
@@ -500,40 +500,34 @@ or a small piece of coordination work that has not landed yet.
 3. **No breached-password checking.** Complexity rules accept `Password1!`.
    *Fix:* the Have I Been Pwned range API, or a bundled denylist. — DREAD DR-13.
 
-4. **Route parameter naming is inconsistent.** The API contract specifies
-   `:noteId`, but `noteController.js` and `validateNote.js` read
-   `req.params.id`, so `noteRoutes.js` keeps `:id`. Cosmetic, but it needs a
-   small joint change by Members 2 and 3 rather than a one-sided rename that
-   would break the note tests. Admin routes already use `:userId` as specified.
-
-5. **Rate-limit counters are per process.** `express-rate-limit` uses an
+4. **Rate-limit counters are per process.** `express-rate-limit` uses an
    in-memory store, which is correct for the single-instance deployment this
    project targets but would need a shared store (Redis) behind a load
    balancer.
 
-6. **Multi-document transactions need a replica set.** Deleting a user removes
+5. **Multi-document transactions need a replica set.** Deleting a user removes
    their notes inside a transaction where one is available. Against a
    standalone MongoDB instance the code detects the lack of support and falls
    back to sequential deletes, where a crash between the two could leave
    orphaned notes. MongoDB Atlas provides a replica set by default.
 
-7. **Audit records are not tamper-evident.** Anyone with database write access
+6. **Audit records are not tamper-evident.** Anyone with database write access
    could alter them. They support investigation but do not provide strong
    non-repudiation.
 
-8. **`LAST_ADMIN_PROTECTED` is not reachable through the API.** Because
+7. **`LAST_ADMIN_PROTECTED` is not reachable through the API.** Because
    administrators can never target their own account, any deletion that
    reaches the last-administrator check is necessarily performed by a
    different, still-active administrator. The check is retained as defence in
    depth against a future code path, and the test suite documents this
    honestly rather than asserting a scenario the code cannot produce.
 
-9. **`trust proxy` is set to one hop in production.** This matches a typical
+8. **`trust proxy` is set to one hop in production.** This matches a typical
    single-tier platform deployment and **must be re-verified** against
    whatever platform is actually used. Trusting the wrong number of hops lets
    a client spoof `X-Forwarded-For` and defeat rate limiting.
 
-10. **There is no change-password or password-reset endpoint.** Both are
+9. **There is no change-password or password-reset endpoint.** Both are
     outside the assignment's scope. It follows that the temporary password
     used by `npm run create-admin` cannot be rotated through the application
     itself yet. `tokenVersion` already exists for exactly this purpose, so
@@ -541,7 +535,7 @@ or a small piece of coordination work that has not landed yet.
     write the new hash, increment `tokenVersion` to log every other session
     out.
 
-11. **CodeQL and Snyk have not produced results yet.** The workflows are
+10. **CodeQL and Snyk have not produced results yet.** The workflows are
     committed but have not run on GitHub, so `scans/remediation-log.md`
     records the manual-review findings and leaves the scanner section
     explicitly empty rather than filling it with invented entries.

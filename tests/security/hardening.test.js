@@ -1,3 +1,5 @@
+const fs = require('fs');
+const path = require('path');
 const express = require('express');
 const cookieParser = require('cookie-parser');
 const request = require('supertest');
@@ -342,5 +344,74 @@ describe('Security response headers and public configuration', () => {
     const response = await request(app).get('/api/health');
 
     expect(response.headers['x-request-id']).toBeDefined();
+  });
+});
+
+describe('Frontend cannot reintroduce an HTML-injection sink', () => {
+  // A static check, not a browser test. The note list previously interpolated
+  // a user-supplied note title into innerHTML, which made a title like
+  // `<img src=x onerror=...>` render as markup — stored XSS. The CSP blocked
+  // execution, but the sink was there, and a CSP is meant to be the second
+  // line of defence rather than the only one.
+  //
+  // Scanning the source is a blunt instrument and deliberately so: it needs no
+  // DOM, runs in milliseconds, and fails the moment anyone reaches for the
+  // dangerous API again — which is exactly the moment to catch it, rather than
+  // in review months later.
+
+  const FRONTEND_DIR = path.join(__dirname, '..', '..', 'public', 'js');
+
+  function scriptFiles() {
+    return fs.readdirSync(FRONTEND_DIR).filter((name) => name.endsWith('.js'));
+  }
+
+  // Comments are stripped first so that a comment *explaining* why innerHTML
+  // is avoided does not itself trip the check.
+  function codeWithoutComments(name) {
+    return fs
+      .readFileSync(path.join(FRONTEND_DIR, name), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/^\s*\/\/.*$/gm, '');
+  }
+
+  test('at least one frontend script is being scanned', () => {
+    expect(scriptFiles().length).toBeGreaterThan(0);
+  });
+
+  test.each([
+    ['innerHTML', /\.innerHTML\s*=/],
+    ['outerHTML', /\.outerHTML\s*=/],
+    ['insertAdjacentHTML', /\.insertAdjacentHTML\s*\(/],
+    ['document.write', /document\s*\.\s*write\s*\(/],
+    ['eval', /\beval\s*\(/],
+  ])('no frontend script assigns through %s', (_label, pattern) => {
+    const offenders = scriptFiles().filter((name) => pattern.test(codeWithoutComments(name)));
+
+    expect(offenders).toEqual([]);
+  });
+});
+
+describe('No HTML page carries an inline script or handler', () => {
+  // The Content Security Policy sets script-src 'self' with no
+  // 'unsafe-inline', so an inline handler would simply not run — the page
+  // would look fine in review and silently do nothing in a browser. Catching
+  // it here turns a confusing runtime non-event into a failing test.
+
+  const PUBLIC_DIR = path.join(__dirname, '..', '..', 'public');
+
+  function htmlFiles() {
+    return fs.readdirSync(PUBLIC_DIR).filter((name) => name.endsWith('.html'));
+  }
+
+  test.each([
+    ['an inline event handler', /\son[a-z]+\s*=\s*["']/i],
+    ['an inline style attribute', /\sstyle\s*=\s*["']/i],
+    ['an inline <script> block', /<script(?![^>]*\ssrc=)[^>]*>/i],
+  ])('no page contains %s', (_label, pattern) => {
+    const offenders = htmlFiles().filter((name) => pattern.test(
+      fs.readFileSync(path.join(PUBLIC_DIR, name), 'utf8'),
+    ));
+
+    expect(offenders).toEqual([]);
   });
 });

@@ -17,12 +17,14 @@ const { verifyCsrfToken } = require('../middleware/csrfProtection');
 // validateNote middleware and noteController — neither of which is
 // modified by this file.
 //
-// Known open item (tracked in the API contract, Table 10, jointly owned by
-// Members 2 & 3): the contract's target convention is `:noteId`, but
-// noteController.js and validateNote.js currently read `req.params.id`.
-// Renaming the param here without updating those two files would break
-// them, so this route intentionally keeps `:id` until that small joint PR
-// lands — see README "Known limitations".
+// Parameter naming (API contract, Table 10): the routes, the controller and
+// the validator all use `:noteId`. This was previously `:id` on one side and
+// `:noteId` in the contract, which is the kind of gap that breaks silently —
+// the router defines the parameter and the controller reads it, so changing
+// only one side leaves every note operation returning 404 with nothing in
+// either member's test suite able to catch it. Both halves were changed
+// together, with Member 2's agreement, and the full suite was run against the
+// assembled application afterwards.
 
 const router = express.Router();
 
@@ -38,13 +40,13 @@ router.post(
 );
 
 router.get(
-  '/:id',
+  '/:noteId',
   validateNoteId,
   noteController.getNoteById,
 );
 
 router.put(
-  '/:id',
+  '/:noteId',
   verifyCsrfToken,
   validateNoteId,
   validateUpdateNote,
@@ -52,7 +54,7 @@ router.put(
 );
 
 router.delete(
-  '/:id',
+  '/:noteId',
   verifyCsrfToken,
   validateNoteId,
   noteController.deleteNote,
