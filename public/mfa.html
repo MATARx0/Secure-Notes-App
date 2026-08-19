@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Two-factor authentication - Secure Notes</title>
+    <link rel="stylesheet" href="/css/styles.css" />
+  </head>
+  <body class="auth-page">
+    <main class="auth-card">
+      <h1>Two-factor authentication</h1>
+      <p class="subtitle" id="mfa-status-text">Checking your account...</p>
+
+      <div id="status-message" class="status-message" role="alert" aria-live="polite"></div>
+
+      <!-- Shown when MFA is currently disabled. -->
+      <section id="mfa-enable-section" class="hidden">
+        <p>
+          Protect your account with a six-digit code from an authenticator
+          app (for example Google Authenticator or Authy), in addition to
+          your password.
+        </p>
+        <button type="button" class="primary-button" id="start-setup-button">
+          Enable two-factor authentication
+        </button>
+
+        <div id="enrollment-panel" class="hidden">
+          <div class="mfa-qr">
+            <img id="mfa-qr-image" alt="Scan this QR code with your authenticator app" />
+          </div>
+          <p>Or enter this key manually:</p>
+          <p class="mfa-manual-key" id="mfa-manual-key"></p>
+
+          <form id="confirm-form" novalidate>
+            <div class="form-group">
+              <label for="confirm-token">Enter the 6-digit code to confirm</label>
+              <input
+                id="confirm-token"
+                name="mfaToken"
+                type="text"
+                inputmode="numeric"
+                pattern="[0-9]{6}"
+                maxlength="6"
+                autocomplete="one-time-code"
+                required
+              />
+            </div>
+            <div class="form-actions">
+              <button type="submit" class="primary-button">Confirm and enable</button>
+            </div>
+          </form>
+        </div>
+      </section>
+
+      <!-- Shown when MFA is currently enabled. -->
+      <section id="mfa-disable-section" class="hidden">
+        <p>Two-factor authentication is currently <strong>enabled</strong> on your account.</p>
+
+        <form id="disable-form" novalidate>
+          <div class="form-group">
+            <label for="disable-password">Current password</label>
+            <input
+              id="disable-password"
+              name="password"
+              type="password"
+              autocomplete="current-password"
+              required
+            />
+          </div>
+          <div class="form-group">
+            <label for="disable-token">Authentication code</label>
+            <input
+              id="disable-token"
+              name="mfaToken"
+              type="text"
+              inputmode="numeric"
+              pattern="[0-9]{6}"
+              maxlength="6"
+              autocomplete="one-time-code"
+              required
+            />
+          </div>
+          <div class="form-actions">
+            <button type="submit" class="danger-button">Disable two-factor authentication</button>
+          </div>
+        </form>
+      </section>
+
+      <p class="auth-links">
+        <a href="/notes.html">Back to notes</a>
+      </p>
+    </main>
+
+    <script src="/js/auth.js"></script>
+  </body>
+</html>

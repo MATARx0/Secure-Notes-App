@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Create account - Secure Notes</title>
+    <link rel="stylesheet" href="/css/styles.css" />
+  </head>
+  <body class="auth-page">
+    <main class="auth-card">
+      <h1>Create your account</h1>
+      <p class="subtitle">Your notes are encrypted and private.</p>
+
+      <div id="status-message" class="status-message" role="alert" aria-live="polite"></div>
+
+      <form id="register-form" novalidate>
+        <div class="form-group">
+          <label for="username">Username</label>
+          <input
+            id="username"
+            name="username"
+            type="text"
+            autocomplete="username"
+            minlength="3"
+            maxlength="30"
+            required
+          />
+          <span class="field-hint">3-30 characters: letters, numbers, dots, underscores, hyphens.</span>
+        </div>
+
+        <div class="form-group">
+          <label for="email">Email</label>
+          <input
+            id="email"
+            name="email"
+            type="email"
+            autocomplete="email"
+            required
+          />
+        </div>
+
+        <div class="form-group">
+          <label for="password">Password</label>
+          <input
+            id="password"
+            name="password"
+            type="password"
+            autocomplete="new-password"
+            minlength="10"
+            required
+          />
+          <span class="field-hint">At least 10 characters, with upper case, lower case, a number, and a symbol.</span>
+        </div>
+
+        <div class="form-group">
+          <label for="password-confirm">Confirm password</label>
+          <input
+            id="password-confirm"
+            name="passwordConfirm"
+            type="password"
+            autocomplete="new-password"
+            minlength="10"
+            required
+          />
+        </div>
+
+        <div id="recaptcha-container" class="captcha-widget"></div>
+
+        <div class="form-actions">
+          <button type="submit" class="primary-button" id="register-submit">Create account</button>
+        </div>
+      </form>
+
+      <p class="auth-links">
+        Already have an account? <a href="/login.html">Log in</a>
+      </p>
+    </main>
+
+    <script src="/js/auth.js"></script>
+  </body>
+</html>
