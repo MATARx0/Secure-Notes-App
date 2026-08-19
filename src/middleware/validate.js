@@ -58,6 +58,24 @@ function rejectUnknownFields(allowedFields) {
 
 const DANGEROUS_KEY_PATTERN = /^\$|\./;
 
+// Keys that can reach an object's prototype chain rather than its own data.
+// Nothing in this application spreads or Object.assigns a request body onto an
+// existing object, which is what actually causes prototype pollution, so no
+// live vector was found — a payload of {"__proto__": {"polluted": 1}} does not
+// pollute anything today, and that was verified rather than assumed.
+//
+// They are stripped anyway. The whole point of this middleware is that a
+// request body cannot carry a key with special meaning to the layer below it,
+// and "no caller currently misuses it" is a property of today's callers, not
+// of the input. Blocking the class here costs one comparison per key and means
+// a future handler that does merge a body into an object cannot be made unsafe
+// by one it did not write.
+const PROTOTYPE_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
+function isDangerousKey(key) {
+  return DANGEROUS_KEY_PATTERN.test(key) || PROTOTYPE_KEYS.has(key);
+}
+
 function sanitizeInPlace(value) {
   if (Array.isArray(value)) {
     value.forEach(sanitizeInPlace);
@@ -69,7 +87,7 @@ function sanitizeInPlace(value) {
   }
 
   Object.keys(value).forEach((key) => {
-    if (DANGEROUS_KEY_PATTERN.test(key)) {
+    if (isDangerousKey(key)) {
       delete value[key];
       return;
     }
