@@ -27,6 +27,23 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
+    # A real MongoDB alongside the job, rather than letting
+    # mongodb-memory-server download a mongod binary from fastdl.mongodb.org
+    # at test time. Two reasons: the pipeline stops depending on a
+    # third-party download host staying reachable, and it saves the download
+    # on every cold run. tests/setup/testDb.js picks this up through
+    # TEST_MONGO_URI and skips the in-memory server entirely.
+    services:
+      mongodb:
+        image: mongo:7
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.runCommand({ ping: 1 }).ok'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
     steps:
       - name: Check out the repository
         uses: actions/checkout@v4
@@ -43,19 +60,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # mongodb-memory-server downloads a MongoDB binary on first use and
-      # caches it, which saves roughly a minute on every subsequent run.
-      - name: Cache the MongoDB binary used by mongodb-memory-server
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/mongodb-binaries
-          key: mongodb-binaries-${{ runner.os }}
-
       - name: Run the test suite
         run: npm test
         env:
           NODE_ENV: test
           CI: true
+          TEST_MONGO_URI: mongodb://127.0.0.1:27017
 
   dependencies:
     name: Dependency audit (npm)

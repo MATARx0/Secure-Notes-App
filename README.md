@@ -218,10 +218,45 @@ The suite spans four areas:
 | Security | `tests/security/` | RBAC, CSRF, rate limiting, sanitisation, CAPTCHA, headers, CORS, payload limits |
 | Administration | `tests/admin/` | User listing, deletion with note cleanup, status changes, audit log |
 
-**The first run is slow.** `mongodb-memory-server` downloads a MongoDB binary
-(roughly 80 MB) and caches it under `~/.cache/mongodb-binaries`. This needs
-internet access; on a restricted network the database-backed files cannot
-start, while the two DB-free security files still run normally:
+### If the tests cannot download MongoDB
+
+By default `mongodb-memory-server` fetches a mongod binary (~80 MB) on the
+first run and caches it under `~/.cache/mongodb-binaries`. That needs access
+to `fastdl.mongodb.org`, which is blocked on a lot of networks — locked-down
+university or corporate Wi-Fi, offline machines, and sandboxed containers all
+fail on it. The failure is loud and misleading: every database-backed suite
+errors at once, which looks like 95 broken tests rather than one blocked
+hostname.
+
+```
+Download failed for url "https://fastdl.mongodb.org/..." Status Code is 403
+```
+
+**Point the tests at any MongoDB you already have instead:**
+
+```bash
+TEST_MONGO_URI=mongodb://127.0.0.1:27017 npm test
+```
+
+The local MongoDB you installed in section 4 works. So does a container:
+
+```bash
+docker run -d -p 27017:27017 --name mongo-test mongo:7
+TEST_MONGO_URI=mongodb://127.0.0.1:27017 npm test
+```
+
+No download happens at all on this path. `tests/setup/testDb.js` forces the
+database name to `secure_notes_automated_tests` and ignores any database named
+in the URI, so the tests can only ever touch that one database — pointing
+`TEST_MONGO_URI` at a server holding other data cannot damage it. The database
+is dropped when the run finishes.
+
+CI uses this path too, via a `mongo:7` service container, so the pipeline does
+not depend on a third-party download host either.
+
+**Running only what needs no database:** two of the security files are written
+to be database-free on purpose, because those controls have to hold even when
+the database is unreachable. They run anywhere, in about four seconds:
 
 ```bash
 npx jest tests/security/hardening.test.js tests/security/rateLimit.integration.test.js
